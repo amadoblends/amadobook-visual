@@ -200,7 +200,7 @@ export default function NewCita_Step2_Cliente({
           </>
         ) : (
           <>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#999', padding: '8px 0 4px', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11 }}>
+            <div style={{ fontWeight: 600, color: '#999', padding: '8px 0 4px', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11 }}>
               Clientes frecuentes
             </div>
             {frequent.map(c => (
