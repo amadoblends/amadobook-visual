@@ -1,8 +1,3 @@
-// middleware.ts
-// Protege rutas y redirige según el rol del usuario
-// /admin/* → solo admin
-// /app/*   → solo client
-
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
@@ -14,13 +9,9 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
+        getAll() { return request.cookies.getAll() },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
@@ -30,61 +21,35 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Refrescar sesión
   const { data: { user } } = await supabase.auth.getUser()
-
   const path = request.nextUrl.pathname
 
-  // Rutas públicas — dejar pasar
-  const publicPaths = ['/login', '/register', '/auth/callback']
-  if (publicPaths.some(p => path.startsWith(p))) {
+  // Rutas públicas
+  if (['/login', '/register', '/auth/callback'].some(p => path.startsWith(p))) {
     return supabaseResponse
   }
 
   // Sin sesión → login
   if (!user) {
-    const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = '/login'
-    return NextResponse.redirect(loginUrl)
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Verificar rol
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  // Solo leer rol desde el JWT cookie para evitar query extra a BD
+  // El rol se guarda en app_metadata via trigger
+  const role = user.user_metadata?.role ?? 'client'
 
-  const role = profile?.role ?? 'client'
-  const isAdminRoute  = path.startsWith('/admin')
-  const isClientRoute = path.startsWith('/app')
-
-  // Cliente intenta entrar a /admin → redirigir a /app
-  if (isAdminRoute && role !== 'admin') {
-    const redirect = request.nextUrl.clone()
-    redirect.pathname = '/app'
-    return NextResponse.redirect(redirect)
-  }
-
-  // Admin intenta entrar a /app → redirigir a /admin
-  if (isClientRoute && role !== 'client') {
-    const redirect = request.nextUrl.clone()
-    redirect.pathname = '/admin'
-    return NextResponse.redirect(redirect)
-  }
-
-  // Raíz → redirigir según rol
   if (path === '/') {
-    const redirect = request.nextUrl.clone()
-    redirect.pathname = role === 'admin' ? '/admin' : '/app'
-    return NextResponse.redirect(redirect)
+    return NextResponse.redirect(new URL(role === 'admin' ? '/admin' : '/app', request.url))
+  }
+
+  // Admin intentando entrar a /app
+  if (path.startsWith('/app') && role === 'admin') {
+    return NextResponse.redirect(new URL('/admin', request.url))
   }
 
   return supabaseResponse
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icons|manifest.json|sw.js).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|icons|manifest.json).*)'],
 }
